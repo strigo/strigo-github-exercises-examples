@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd">
+<?asciidoc-toc?>
+<?asciidoc-numbered?>
+
+<article lang="en">
+<articleinfo>
+    <title>How to monitor my compute instance in GCP?</title>
+</articleinfo>
+<simpara>In this tutorial you will see how to monitor your GCP compute Engine.</simpara>
+<section id="_service_account_setup">
+<title>Service Account setup</title>
+<simpara>GCP implements <ulink url="https://cloud.google.com/compute/docs/access/service-accounts">service accounts, window=_blank</ulink> as a way to securely access APIs. In order to monitor GCP with Elastic we will need a service account. The easiest way is to use a predefined service account that GCP <ulink url="https://cloud.google.com/compute/docs/access/service-accounts?hl=en#default_service_account">creates automatically, window=_blank</ulink>. Alternatively we can create a new service account. In this tutorial, we will create a new one:</simpara>
+<simpara>First, we will access the service account menu by clicking on <emphasis>Menu &#8594; IAM &amp; Admin &#8594; Service Accounts</emphasis>.</simpara>
+<simpara><inlinemediaobject>
+  <imageobject>
+  <imagedata fileref="images/service_account_menu.png"/>
+  </imageobject>
+  <textobject><phrase>width=50%</phrase></textobject>
+</inlinemediaobject></simpara>
+<simpara>Next, we will click on <emphasis>Create Service Account</emphasis>. Then, we will define the new service account name as <emphasis>gcp-monitor</emphasis> and the description as "Service account to monitor GCP services using the Elastic Stack".</simpara>
+<simpara><inlinemediaobject>
+  <imageobject>
+  <imagedata fileref="images/service_account_name.png"/>
+  </imageobject>
+  <textobject><phrase>width=50%</phrase></textobject>
+</inlinemediaobject></simpara>
+<important>
+<simpara>This next step is very important, so make sure to click on the correct roles.</simpara>
+</important>
+<simpara>In order to monitor our GCP services we need to add two main roles to the service account:</simpara>
+<simpara><emphasis>Compute Viewer</emphasis>:</simpara>
+<simpara><inlinemediaobject>
+  <imageobject>
+  <imagedata fileref="images/service_account_roles_compute_viewer.png"/>
+  </imageobject>
+  <textobject><phrase>width=50%</phrase></textobject>
+</inlinemediaobject></simpara>
+<simpara><emphasis>Monitoring Viewer</emphasis>:</simpara>
+<simpara><inlinemediaobject>
+  <imageobject>
+  <imagedata fileref="images/service_account_roles_monitoring_viewer.png"/>
+  </imageobject>
+  <textobject><phrase>width=50%</phrase></textobject>
+</inlinemediaobject></simpara>
+<simpara>The final result should be the following:</simpara>
+<simpara><inlinemediaobject>
+  <imageobject>
+  <imagedata fileref="images/service_account_roles_final.png"/>
+  </imageobject>
+  <textobject><phrase>width=50%</phrase></textobject>
+</inlinemediaobject></simpara>
+<simpara>Click on Continue, then skip granting users access to this service. Finally, click <emphasis>DONE</emphasis> and our service account will be ready to be used.</simpara>
+<simpara>Next, in order to use the service account we need to click on create keys and create the JSON key type.
+<inlinemediaobject>
+  <imageobject>
+  <imagedata fileref="images/service_account_create_key.png"/>
+  </imageobject>
+  <textobject><phrase>width=50%</phrase></textobject>
+</inlinemediaobject></simpara>
+<simpara>Clicking on create key downloads the credential file. We will keep this file in a accessible place to use later.</simpara>
+</section>
+<section id="_elastic_stack_setup">
+<title>Elastic Stack setup</title>
+<simpara>In order to monitor GCP using the Elastic Stack we need two main components: an Elastic deployment to store and analyze the data and an agent to collect and ship the data.</simpara>
+<note>
+<simpara>In this tutorial we assume the Elastic cluster is already running and ready to be used. Make sure you have your <emphasis role="strong">cloudid</emphasis> and your credentials in hand.</simpara>
+</note>
+<simpara>There are two agents that can be used to monitor GCP. We will use Metricbeat to monitor metrics and Filebeat to monitor logs. We could run the monitor agent in any machine, but in this tutorial we will use a small GCP instance, e2-small (2 vCPUs, 2 GB memory), with an Ubuntu distribution. After starting and connecting to the agent instance, we will download and configure the agent.</simpara>
+<programlisting language="role=bash" linenumbering="unnumbered">wget https://artifacts.elastic.co/downloads/beats/metricbeat/metricbeat-7.9.2-linux-x86_64.tar.gz
+tar metricbeat-7.9.2-linux-x86_64.tar.gz</programlisting>
+<simpara>First, we will configure and test the output. Edit <literal>metricbeat-7.9.2-linux-x86_64/metricbeat.yml</literal> and add the following lines to the end of the file.</simpara>
+<programlisting language="role=bash" linenumbering="unnumbered">cloud.id: "${CLOUD_ID}"
+cloud.auth: "${ES_PWD}"</programlisting>
+<simpara>Next, we will create the keystore to securely store our credentials.</simpara>
+<programlisting language="role=bash" linenumbering="unnumbered">./metricbeat keystore create</programlisting>
+<simpara>Run the command below and then paste the cloud id we kept in hand as suggested earlier.</simpara>
+<programlisting language="role=bash" linenumbering="unnumbered">./metricbeat keystore add CLOUD_ID</programlisting>
+<simpara>Next, we will add the credentials to the keystore by running the command below and inserting <literal>elastic:&lt;password&gt;</literal>, where <literal>&lt;password&gt;</literal> is our cluster password.</simpara>
+<programlisting language="role=bash" linenumbering="unnumbered">./metricbeat keystore add ES_PWD</programlisting>
+<simpara>Finally, we will test if the configuration is working. If it is not working, verify if you used the right credentials and add them again.</simpara>
+<programlisting language="role=bash" linenumbering="unnumbered">./metricbeat test output</programlisting>
+<simpara>Now that the output is working we are going to setup the input (GCP).</simpara>
+</section>
+<section id="_gcp_compute">
+<title>GCP Compute</title>
+<simpara>In order to collect metrics from GCP, we will use the <ulink url="https://www.elastic.co/guide/en/beats/metricbeat/current/metricbeat-module-googlecloud.html">Google Cloud Platform, window=_blank</ulink> module. This module periodically fetches monitoring metrics from Google Cloud Platform using <ulink url="https://cloud.google.com/monitoring/api/metrics_gcp">Stackdriver Monitoring API, window=_blank</ulink> for Google Cloud Platform services.</simpara>
+<warning>
+<simpara>Extra GCP charges on Stackdriver Monitoring API requests may be generated by this module. Please see <ulink url="https://www.elastic.co/guide/en/beats/metricbeat/current/metricbeat-module-googlecloud.html#gcp-api-requests">rough estimation of the number of API calls, window=_blank</ulink> for more details.</simpara>
+</warning>
+<simpara>First, enable the GCP module.</simpara>
+<programlisting language="role=bash" linenumbering="unnumbered">./metricbeat enable googlecloud</programlisting>
+<simpara>Next, we will edit the <literal>modules.d/googlecloud.yml</literal> file to configure which metrics do we want to collect.</simpara>
+- module: googlecloud
+  metricsets:
+    - compute
+  zone: ""
+  project_id: "elastic-education"
+  period: 1m
+  credentials_file_path: "/home/ubuntu/metricbeat-7.9.2-linux-x86_64/credentials.json"</programlisting>
+<simpara>Note that we are using the <literal>compute</literal> metricset which is a predefined metricset that collects some GCP compute metrics. We are collecting data from all zones within the <literal>elastic-education</literal> project-id. Finally, the <literal>credentials_file_path</literal> is the path to the credentials file that we have generated earlier (don&#8217;t forget to create the file if it does not exist and to use the correct full path).</simpara>
+<simpara>Now, we can simply test the input and check if the data is being collected.</simpara>
+<programlisting language="role=bash" linenumbering="unnumbered">./metricbeat test input</programlisting>
+<simpara>Input and output ready. Next we will setup Kibana (this might take a few minutes) and start loading the data.</simpara>
+<programlisting language="role=bash" linenumbering="unnumbered">./metricbeat setup
+./metricbeat -e</programlisting>
+<simpara>Finally, go to Kibana and open the "[Metricbeat Googlecloud] Compute Overview" dashboard.
+<inlinemediaobject>
+  <imageobject>
+  <imagedata fileref="images/gcp_compute_overview_dashboard.png"/>
+  </imageobject>
+  <textobject><phrase>width=50%</phrase></textobject>
+</inlinemediaobject></simpara>
+</section>
+<section id="_bigquery">
+<title>Bigquery</title>
+</section>
+<section id="_bigtable">
+<title>Bigtable</title>
+</section>
+</article>
