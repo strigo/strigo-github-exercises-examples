@@ -3,6 +3,8 @@
 classes:
   - exercises:
       # `file` is relative to .strigo directory
+      - file: "../markup-syntaxes/codeblocks.md"
+        title: "Codeblocks"
       - file: "../hello-world/hello.md"
         title: "Hello!"
       - file: "../hello-world/world.md"
