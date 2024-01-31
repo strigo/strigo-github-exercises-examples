@@ -4,7 +4,7 @@ You also can use images inside your repository.
 
 Just look at this cat:
 
-![](wide.png)
+![](giphy.png)
 
 or this one
 
